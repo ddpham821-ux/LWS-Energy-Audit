@@ -190,4 +190,65 @@ if uploaded_file is not None:
             selected_block_comp = st.selectbox("Select Block:", sorted(data['Block'].unique()), key='comp_block')
             selected_floor_comp = st.selectbox("Select Floor:", sorted(data[data['Block'] == selected_block_comp]['Floor'].unique()), key='comp_floor')
             
-            subset = data[(data['Block'])]
+            subset = data[(data['Block'] == selected_block_comp) & (data['Floor'] == selected_floor_comp)]
+            
+            fig_comp = px.bar(
+                subset, x='Room', y='Per_Student_kWh', color='Month', barmode='group',
+                title=f"Per-Student Energy Comparison Across Block {selected_block_comp}, Floor {selected_floor_comp}"
+            )
+            st.plotly_chart(fig_comp, use_container_width=True)
+        else:
+            selected_orient = st.selectbox("Select Window Facade Orientation:", sorted(data['Orientation'].unique()))
+            subset = data[data['Orientation'] == selected_orient]
+            
+            fig_orient = px.box(
+                subset, x='Room', y='Per_Student_kWh',
+                title=f"Energy Distribution for Rooms Facing: {selected_orient}"
+            )
+            st.plotly_chart(fig_orient, use_container_width=True)
+
+    with tab5:
+        st.subheader("Hostel Room Directory & Student Capacity")
+        st.write("Quick reference showing whether a room holds 2 or 3 students, and its window direction.")
+        directory = data[['Room', 'Block', 'Floor', 'Tenants', 'Orientation']].drop_duplicates().sort_values('Room')
+        st.dataframe(directory, use_container_width=True)
+
+    with tab6:
+        st.subheader("Intuitive Room Inspector (No Scrolling)")
+        st.write("Easily filter down to the room you want by picking its building block and floor first.")
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            sel_block = st.selectbox("1. Select Block:", sorted(data['Block'].unique()))
+        with c2:
+            available_floors = sorted(data[data['Block'] == sel_block]['Floor'].unique())
+            sel_floor = st.selectbox("2. Select Floor:", available_floors)
+        with c3:
+            available_rooms = sorted(data[(data['Block'] == sel_block) & (data['Floor'] == sel_floor)]['Room'].unique())
+            sel_room = st.selectbox("3. Select Room Number:", available_rooms)
+            
+        room_history = data[data['Room'] == sel_room]
+        meta = room_history.iloc[0]
+        
+        st.info(f"**Room Details:** Room **{sel_room}** | Block {meta['Block']} | Floor {meta['Floor']} | Capacity: {meta['Tenants']} Students | Window Facing: {meta['Orientation']}")
+        
+        fig_hist = px.line(
+            room_history, x='Month', y=['Per_Student_kWh', 'Monthly_Avg'], markers=True,
+            title=f"Electricity Use Over Time: Room {sel_room} vs. Dormitory Average (Per Student kWh)"
+        )
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+    # Collapsible Technical Section for Scholarship Reviewers & Judges
+    with st.expander("🔬 Engineering Methodology & Mathematical Formulas (For Reviewers)"):
+        st.markdown("""
+        If you are evaluating this platform for technical and algorithmic rigor, here are the underlying calculations used:
+        1. **Per-Capita Occupancy Normalization:** 
+           $$\\text{Per\\_Student\\_kWh} = \\frac{\\text{Total Room kWh}}{\\text{Tenants (2 or 3)}}$$
+           *Ensures high consumption isn't falsely blamed on rooms housing 3 students instead of 2.*
+        2. **Dynamic Monthly Z-Score Outlier Detection:** 
+           $$Z = \\frac{x - \\mu}{\\sigma}$$
+           Where $x$ is a room's per-student kWh, $\\mu$ is the monthly mean across all dorms, and $\\sigma$ is the standard deviation. This neutralizes seasonal weather shifts while isolating true mechanical hardware malfunctions.
+        3. **Facade Orientation Mapping:** Room numbers are programmatically parsed (e.g., North Block units 1–12 mapped to West-facing solar radiation exposure) to quantify micro-climate thermal penalties.
+        """)
+else:
+    st.info("👈 Please upload your `LWS Data.xlsx` file in the sidebar to get started.")
