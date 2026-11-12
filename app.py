@@ -150,4 +150,11 @@ if uploaded_file is not None:
 
     with tab5:
         st.subheader("Interactive Single-Room Diagnostic Lab")
-        selected_room = st.selectbox("Select Room to
+        selected_room = st.selectbox("Select Room to Inspect:", sorted(data['Room'].unique()), index=sorted(data['Room'].unique()).index('S417') if 'S417' in data['Room'].unique() else 0)
+        room_data = data[data['Room'] == selected_room]
+        
+        tenant_count = room_data['Tenants'].iloc[0]
+        st.write(f"**Room Metadata:** Block {room_data['Block'].iloc[0]} | Floor {room_data['Floor'].iloc[0]} | Capacity: {tenant_count} Students")
+        
+        fig_room_ts = px.line(
+            room_data, x='Month', y=['kWh
