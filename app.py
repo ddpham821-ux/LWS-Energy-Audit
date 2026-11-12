@@ -5,18 +5,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # Page Configuration
-st.set_page_config(page_title="LWS Advanced Energy Diagnostics & Thermal Equity Engine", layout="wide")
+st.set_page_config(page_title="Lee Woo Sing College - Facilities Energy Action Desk", layout="wide")
 
-st.title("⚡ Lee Woo Sing College: Advanced Energy Audit & Thermal Equity Platform")
-st.markdown("Enterprise-grade diagnostic engine featuring per-capita normalization, solar facade orientation modeling, thermal gradient isolation, and actionable policy recommendations.")
+st.title("⚡ Lee Woo Sing College: Facilities Energy Action Desk")
+st.markdown("A practical management tool to track electricity usage, spot broken air conditioners, and fix room temperature issues across Hostels 4 and 5.")
 
 # Sidebar: File Upload & Controls
-st.sidebar.header("1. Telemetry Ingestion")
+st.sidebar.header("1. Upload Monthly Data")
 uploaded_file = st.sidebar.file_uploader("Upload LWS Data Excel Log (.xlsx)", type=["xlsx"])
 
-st.sidebar.header("2. Diagnostic Parameters")
-z_threshold = st.sidebar.slider("Anomaly Z-Score Threshold", min_value=1.0, max_value=3.0, value=1.5, step=0.1)
-min_persistence = st.sidebar.slider("Persistence Filter (Min Months Flagged)", min_value=1, max_value=12, value=3)
+st.sidebar.header("2. Filtering Settings")
+sensitivity = st.sidebar.slider("Detection Sensitivity (How strict)", min_value=1.0, max_value=3.0, value=1.5, step=0.1)
+min_months = st.sidebar.slider("Minimum Months Problematic", min_value=1, max_value=12, value=3)
 
 # Confirmed 32 Triple Rooms
 TRIPLE_ROOMS = [
@@ -28,7 +28,7 @@ TRIPLE_ROOMS = [
 ]
 
 @st.cache_data
-def load_and_process_advanced(file):
+def load_and_process_clean(file):
     df = pd.read_excel(file, sheet_name=0)
     long_dfs = []
     for chunk_start in range(0, 30, 10):
@@ -44,12 +44,12 @@ def load_and_process_advanced(file):
     
     energy_df = pd.concat(long_dfs, ignore_index=True)
     
-    # Metadata & Occupancy Normalization
+    # Metadata & Occupancy Normalization (Adjusting for 2 vs 3 students)
     energy_df['Tenants'] = energy_df['Room'].apply(lambda r: 3 if r in TRIPLE_ROOMS else 2)
-    energy_df['kWh_Per_Capita'] = energy_df['kWh'] / energy_df['Tenants']
+    energy_df['Per_Student_kWh'] = energy_df['kWh'] / energy_df['Tenants']
     
     def parse_room_metadata(r):
-        block = r[0] # N or S
+        block = r[0] 
         rest = r[1:]
         if rest.startswith('G'): 
             floor = 0
@@ -61,130 +61,91 @@ def load_and_process_advanced(file):
             floor = int(rest[0])
             unit_num = int(rest[1:])
             
-        # Facade Orientation Logic based on user floor plan rules:
-        # South Block: units 1-12 face North, units 13-21 face South
-        # North Block: units 1-12 face West, units 13-21 face East
+        # Facade orientation based on floor plan layout
         if block == 'S':
-            orientation = 'North-Facing' if unit_num <= 12 else 'South-Facing'
+            orientation = 'North-Facing (Shaded)' if unit_num <= 12 else 'South-Facing (Sunny)'
         else:
-            orientation = 'West-Facing (Solar Heat Gain)' if unit_num <= 12 else 'East-Facing'
+            orientation = 'West-Facing (Afternoon Heat)' if unit_num <= 12 else 'East-Facing (Morning Sun)'
             
         return pd.Series([block, floor, unit_num, orientation])
     
     energy_df[['Block', 'Floor', 'Unit_Num', 'Orientation']] = energy_df['Room'].apply(parse_room_metadata)
     
-    # Advanced Statistical Modeling
-    energy_df['Month_Mean_PC'] = energy_df.groupby('Month')['kWh_Per_Capita'].transform('mean')
-    energy_df['Month_Std_PC'] = energy_df.groupby('Month')['kWh_Per_Capita'].transform('std')
-    energy_df['Z_Score_PC'] = (energy_df['kWh_Per_Capita'] - energy_df['Month_Mean_PC']) / energy_df['Month_Std_PC']
-    
-    # Seasonal Baselining
-    energy_df['Season'] = energy_df['Month'].apply(lambda m: 'Summer/Cooling' if any(s in m for s in ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']) else 'Winter/Base')
+    # Statistical baseline comparison per month
+    energy_df['Monthly_Avg'] = energy_df.groupby('Month')['Per_Student_kWh'].transform('mean')
+    energy_df['Monthly_Std'] = energy_df.groupby('Month')['Per_Student_kWh'].transform('std')
+    energy_df['Deviation_Score'] = (energy_df['Per_Student_kWh'] - energy_df['Monthly_Avg']) / energy_df['Monthly_Std']
     
     return energy_df
 
 if uploaded_file is not None:
-    data = load_and_process_advanced(uploaded_file)
+    data = load_and_process_clean(uploaded_file)
     
-    # Top KPI Summary Row
+    # Summary Metrics
     col1, col2, col3, col4 = st.columns(4)
-    flagged = data[data['Z_Score_PC'] > z_threshold]
-    repeat_offenders = flagged.groupby(['Room', 'Block', 'Floor', 'Orientation', 'Tenants']).agg(
-        Flags=('Z_Score_PC', 'count'),
-        Avg_Per_Capita_kWh=('kWh_Per_Capita', 'mean'),
-        Max_Z=('Z_Score_PC', 'max')
+    flagged = data[data['Deviation_Score'] > sensitivity]
+    maintenance_list = flagged.groupby(['Room', 'Block', 'Floor', 'Orientation', 'Tenants']).agg(
+        Months_Flagged=('Deviation_Score', 'count'),
+        Avg_Usage_Per_Student=('Per_Student_kWh', 'mean')
     ).reset_index()
-    priority_queue = repeat_offenders[repeat_offenders['Flags'] >= min_persistence].sort_values(by='Flags', ascending=False)
+    action_queue = maintenance_list[maintenance_list['Months_Flagged'] >= min_months].sort_values(by='Months_Flagged', ascending=False)
     
-    col1.metric("Total Rooms Audited", data['Room'].nunique())
-    col2.metric("Total Records Analyzed", len(data))
-    col3.metric("Critical Hardware Outliers", len(priority_queue))
-    col4.metric("Top Outlier Room", priority_queue.iloc[0]['Room'] if len(priority_queue) > 0 else "None")
+    col1.metric("Rooms Monitored", data['Room'].nunique())
+    col2.metric("Total Records Tracked", len(data))
+    col3.metric("Rooms Needing Inspection", len(action_queue))
+    col4.metric("Top Priority Room", action_queue.iloc[0]['Room'] if len(action_queue) > 0 else "None")
 
-    # Deep Analytical Modules (Added Room Directory & Action Plan Tabs)
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "🧠 AI Executive Synthesis", 
-        "🚪 Room Occupancy & Orientation Directory",
-        "🔍 Multi-Year Hardware Anomaly Engine", 
-        "🏗️ Solar Facade & Thermal Gradient Audit", 
-        "📊 Seasonal Baseline & Load Disaggregation",
-        "🎯 Interactive Single-Room Diagnostic Lab"
+    # Clean, Non-Technical Tabs
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🚨 What to Fix First (Action List)", 
+        "☀️ Room Heat & Sun Exposure Guide", 
+        "🚪 Room Directory & Occupancy",
+        "🔍 Look Up Individual Room History"
     ])
     
     with tab1:
-        st.subheader("Deep Engineering & Operational Insights Brief")
-        st.write("Synthesized diagnostics designed for collegiate facility management and technical review boards.")
+        st.subheader("Actionable Maintenance Work Order")
+        st.write("These rooms consume significantly more electricity per student than the rest of the dorm over multiple months, indicating faulty air conditioning equipment or poor window insulation.")
         
-        top_room = priority_queue.iloc[0]['Room'] if len(priority_queue) > 0 else "S417"
+        if len(action_queue) > 0:
+            top_spot = action_queue.iloc[0]['Room']
+            st.error(f"⚠️ **Immediate Priority:** Dispatch a technician to check **Room {top_spot}**. It has flagged high energy spikes in {action_queue.iloc[0]['Months_Flagged']} separate months.")
         
-        st.info(f"""
-        ### Key Analytical Findings & Proposal Impact:
-        1. **Persistent Hardware Outlier Isolation:** Room **{top_room}** demonstrates chronic thermal inefficiency that cannot be explained by occupancy or behavioral habits. The persistence score confirms mechanical degradation (likely AC compressor expansion valve failure or refrigerant leak).
-        2. **Solar Facade & Thermal Stacking Penalty:** West-facing rooms (Units 1–12 in North Block) and top floors experience severe thermal penalties due to afternoon solar radiation and lack of roof insulation.
-        3. **Actionable Policy Recommendations:** Move away from flat-rate punitive electricity penalties. Implement a *Thermal Equity Buffer* that automatically scales allowances based on room orientation and floor stacking.
-        """)
+        st.dataframe(action_queue, use_container_width=True)
+        
+        csv_export = action_queue.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Work Order for Technicians (CSV)", csv_export, "Maintenance_Action_List.csv", "text/csv")
 
     with tab2:
-        st.subheader("Master Room Occupancy & Solar Facade Directory")
-        st.write("Reference table detailing tenant capacity (2 vs. 3 students) and architectural solar orientation for every room.")
+        st.subheader("Why Certain Rooms Use More Power (Sun & Heat Study)")
+        st.write("Based on the building blueprints, rooms facing the West (North Block units 1–12) and upper floors take direct afternoon sunlight, requiring much more cooling power.")
         
-        room_directory = data[['Room', 'Block', 'Floor', 'Unit_Num', 'Tenants', 'Orientation']].drop_duplicates().sort_values('Room')
-        st.dataframe(room_directory, use_container_width=True)
-        
-        csv_dir = room_directory.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Export Room Directory (CSV)", csv_dir, "LWS_Room_Metadata_Directory.csv", "text/csv")
+        sun_summary = data.groupby('Orientation')['Per_Student_kWh'].mean().reset_index()
+        fig_sun = px.bar(
+            sun_summary, x='Orientation', y='Per_Student_kWh',
+            title="Average Electricity Used per Student Based on Which Way the Room Windows Face",
+            labels={'Per_Student_kWh': 'Average Monthly kWh per Student'}
+        )
+        st.plotly_chart(fig_sun, use_container_width=True)
 
     with tab3:
-        st.subheader("Occupancy-Normalized Hardware Maintenance Priority Queue")
-        st.write("Rooms ranked by frequency of exceeding per-capita peer consumption across 25 months.")
-        
-        fig_anom = px.bar(
-            priority_queue.head(15), x='Room', y='Flags', color='Block',
-            hover_data=['Floor', 'Orientation', 'Tenants', 'Avg_Per_Capita_kWh'],
-            title="Top Priority Maintenance Targets (Normalized per Capita)"
-        )
-        st.plotly_chart(fig_anom, use_container_width=True)
-        st.dataframe(priority_queue, use_container_width=True)
-        
-        csv = priority_queue.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Export Verified Maintenance Work Order (CSV)", csv, "LWS_Advanced_Audit_Queue.csv", "text/csv")
+        st.subheader("Hostel Room Directory & Student Capacity")
+        st.write("Quick reference showing whether a room holds 2 or 3 students, and its window direction.")
+        directory = data[['Room', 'Block', 'Floor', 'Tenants', 'Orientation']].drop_duplicates().sort_values('Room')
+        st.dataframe(directory, use_container_width=True)
 
     with tab4:
-        st.subheader("Solar Facade Orientation & Floor Stacking Thermal Gradient")
-        facade_profile = data.groupby(['Orientation', 'Season'])['kWh_Per_Capita'].mean().reset_index()
+        st.subheader("Individual Room History Inspector")
+        chosen_room = st.selectbox("Select a room number to inspect:", sorted(data['Room'].unique()), index=sorted(data['Room'].unique()).index('S417') if 'S417' in data['Room'].unique() else 0)
+        room_history = data[data['Room'] == chosen_room]
         
-        fig_facade = px.bar(
-            facade_profile, x='Orientation', y='kWh_Per_Capita', color='Season', barmode='group',
-            title="Per-Capita Cooling Load by Architectural Facade Orientation",
-            labels={'kWh_Per_Capita': 'Avg Monthly kWh per Student'}
+        meta = room_history.iloc[0]
+        st.info(f"**Room Details:** Block {meta['Block']} | Floor {meta['Floor']} | Capacity: {meta['Tenants']} Students | Window Facing: {meta['Orientation']}")
+        
+        fig_hist = px.line(
+            room_history, x='Month', y='Per_Student_kWh', markers=True,
+            title=f"Electricity Use Over Time for Room {chosen_room} (Per Student kWh)"
         )
-        st.plotly_chart(fig_facade, use_container_width=True)
-
-    with tab5:
-        st.subheader("Seasonal Load Disaggregation (Base vs. Cooling Load)")
-        season_summary = data.groupby(['Room', 'Season'])['kWh_Per_Capita'].mean().unstack().reset_index()
-        season_summary['Cooling_Penalty_Delta'] = season_summary['Summer/Cooling'] - season_summary['Winter/Base']
-        
-        fig_scatter = px.scatter(
-            season_summary, x='Winter/Base', y='Summer/Cooling', hover_data=['Room'],
-            title="Room Energy Signature: Winter Base Load vs. Summer Cooling Load",
-            labels={'Winter/Base': 'Winter Per-Capita kWh', 'Summer/Cooling': 'Summer Per-Capita kWh'}
-        )
-        fig_scatter.add_shape(type='line', x0=0, y0=0, x1=max(season_summary['Summer/Cooling']), y1=max(season_summary['Summer/Cooling']), line=dict(dash='dash', color='gray'))
-        st.plotly_chart(fig_scatter, use_container_width=True)
-
-    with tab6:
-        st.subheader("Interactive Single-Room Diagnostic Lab")
-        selected_room = st.selectbox("Select Room to Inspect:", sorted(data['Room'].unique()), index=sorted(data['Room'].unique()).index('S417') if 'S417' in data['Room'].unique() else 0)
-        room_data = data[data['Room'] == selected_room]
-        
-        meta = room_data.iloc[0]
-        st.write(f"**Room Metadata:** Block {meta['Block']} | Floor {meta['Floor']} | Unit {meta['Unit_Num']} | Capacity: {meta['Tenants']} Students | Facade: {meta['Orientation']}")
-        
-        fig_room_ts = px.line(
-            room_data, x='Month', y='kWh_Per_Capita', markers=True,
-            title=f"Detailed Trajectory: Room {selected_room} (Per Capita kWh)"
-        )
-        st.plotly_chart(fig_room_ts, use_container_width=True)
+        st.plotly_chart(fig_hist, use_container_width=True)
 else:
-    st.info("👈 Please upload your `LWS Data.xlsx` telemetry file in the sidebar to initialize the advanced audit platform.")
+    st.info("👈 Please upload your `LWS Data.xlsx` file in the sidebar to get started.")
