@@ -5,7 +5,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 # Page Configuration
 st.set_page_config(page_title="Lee Woo Sing College - Facilities Energy Action Desk", layout="wide")
-
 st.title("⚡ Lee Woo Sing College: Facilities Energy Action Desk")
 st.markdown("A practical management tool to track electricity usage, spot broken air conditioners, and improve room comfort fairly across Hostels 4 and 5.")
 
