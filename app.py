@@ -16,7 +16,6 @@ uploaded_file = st.sidebar.file_uploader("Upload LWS Data Excel Log (.xlsx)", ty
 
 st.sidebar.header("2. Filtering Settings")
 
-# Slider with built-in info tooltip explaining the exact statistical formula
 sensitivity = st.sidebar.slider(
     "Detection Sensitivity (How strict)", 
     min_value=1.0, max_value=3.0, value=1.5, step=0.1,
@@ -58,7 +57,7 @@ def load_and_process_clean(file):
     
     energy_df = pd.concat(long_dfs, ignore_index=True)
     
-    # Metadata & Occupancy Normalization (Adjusting for 2 vs 3 students)
+    # Metadata & Occupancy Normalization
     energy_df['Tenants'] = energy_df['Room'].apply(lambda r: 3 if r in TRIPLE_ROOMS else 2)
     energy_df['Per_Student_kWh'] = energy_df['kWh'] / energy_df['Tenants']
     
@@ -108,12 +107,13 @@ if uploaded_file is not None:
     col3.metric("Rooms Needing Inspection", len(action_queue))
     col4.metric("Top Priority Room", action_queue.iloc[0]['Room'] if len(action_queue) > 0 else "None")
 
-    # Clean, Non-Technical Tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # Clean, Non-Technical Tabs (Added Floor & Facade Comparison Tab)
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🚨 What to Fix First (Action List)", 
         "☀️ Room Heat & Sun Exposure Guide", 
+        "🏢 Floor & Facade Peer Comparison",
         "🚪 Room Directory & Occupancy",
-        "🔍 Look Up Individual Room History"
+        "🔍 Intuitive Room Inspector"
     ])
     
     with tab1:
@@ -142,22 +142,61 @@ if uploaded_file is not None:
         st.plotly_chart(fig_sun, use_container_width=True)
 
     with tab3:
+        st.subheader("Compare Rooms on the Same Floor or Sun Exposure")
+        st.write("Select a floor or orientation to see how rooms compare side-by-side under identical thermal conditions.")
+        
+        comp_mode = st.radio("Comparison Mode:", ["By Floor Level", "By Sun/Facade Orientation"], horizontal=True)
+        
+        if comp_mode == "By Floor Level":
+            selected_block_comp = st.selectbox("Select Block:", sorted(data['Block'].unique()), key='comp_block')
+            selected_floor_comp = st.selectbox("Select Floor:", sorted(data[data['Block'] == selected_block_comp]['Floor'].unique()), key='comp_floor')
+            
+            subset = data[(data['Block'] == selected_block_comp) & (data['Floor'] == selected_floor_comp)]
+            
+            fig_comp = px.bar(
+                subset, x='Room', y='Per_Student_kWh', color='Month', barmode='group',
+                title=f"Per-Student Energy Comparison Across Block {selected_block_comp}, Floor {selected_floor_comp}"
+            )
+            st.plotly_chart(fig_comp, use_container_width=True)
+        else:
+            selected_orient = st.selectbox("Select Window Facade Orientation:", sorted(data['Orientation'].unique()))
+            subset = data[data['Orientation'] == selected_orient]
+            
+            fig_orient = px.box(
+                subset, x='Room', y='Per_Student_kWh',
+                title=f"Energy Distribution for Rooms Facing: {selected_orient}"
+            )
+            st.plotly_chart(fig_orient, use_container_width=True)
+
+    with tab4:
         st.subheader("Hostel Room Directory & Student Capacity")
         st.write("Quick reference showing whether a room holds 2 or 3 students, and its window direction.")
         directory = data[['Room', 'Block', 'Floor', 'Tenants', 'Orientation']].drop_duplicates().sort_values('Room')
         st.dataframe(directory, use_container_width=True)
 
-    with tab4:
-        st.subheader("Individual Room History Inspector")
-        chosen_room = st.selectbox("Select a room number to inspect:", sorted(data['Room'].unique()), index=sorted(data['Room'].unique()).index('S417') if 'S417' in data['Room'].unique() else 0)
-        room_history = data[data['Room'] == chosen_room]
+    with tab5:
+        st.subheader("Intuitive Room Inspector (No Scrolling)")
+        st.write("Easily filter down to the room you want by picking its building block and floor first.")
         
+        # Cascading Selectors
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            sel_block = st.selectbox("1. Select Block:", sorted(data['Block'].unique()))
+        with c2:
+            available_floors = sorted(data[data['Block'] == sel_block]['Floor'].unique())
+            sel_floor = st.selectbox("2. Select Floor:", available_floors)
+        with c3:
+            available_rooms = sorted(data[(data['Block'] == sel_block) & (data['Floor'] == sel_floor)]['Room'].unique())
+            sel_room = st.selectbox("3. Select Room Number:", available_rooms)
+            
+        room_history = data[data['Room'] == sel_room]
         meta = room_history.iloc[0]
-        st.info(f"**Room Details:** Block {meta['Block']} | Floor {meta['Floor']} | Capacity: {meta['Tenants']} Students | Window Facing: {meta['Orientation']}")
+        
+        st.info(f"**Room Details:** Room **{sel_room}** | Block {meta['Block']} | Floor {meta['Floor']} | Capacity: {meta['Tenants']} Students | Window Facing: {meta['Orientation']}")
         
         fig_hist = px.line(
-            room_history, x='Month', y='Per_Student_kWh', markers=True,
-            title=f"Electricity Use Over Time for Room {chosen_room} (Per Student kWh)"
+            room_history, x='Month', y=['Per_Student_kWh', 'Monthly_Avg'], markers=True,
+            title=f"Electricity Use Over Time: Room {sel_room} vs. Dormitory Average (Per Student kWh)"
         )
         st.plotly_chart(fig_hist, use_container_width=True)
 
@@ -170,7 +209,7 @@ if uploaded_file is not None:
            *Ensures high consumption isn't falsely blamed on rooms housing 3 students instead of 2.*
         2. **Dynamic Monthly Z-Score Outlier Detection:** 
            $$Z = \\frac{x - \\mu}{\\sigma}$$
-           Where $x$ is a room's per-student kWh, $\\mu$ is the monthly mean across all dorms, and $\\sigma$ is the standard deviation. This neutralizes seasonal weather shifts (e.g., higher summer cooling usage across the entire building) while isolating true mechanical hardware malfunctions.
+           Where $x$ is a room's per-student kWh, $\\mu$ is the monthly mean across all dorms, and $\\sigma$ is the standard deviation. This neutralizes seasonal weather shifts while isolating true mechanical hardware malfunctions.
         3. **Facade Orientation Mapping:** Room numbers are programmatically parsed (e.g., North Block units 1–12 mapped to West-facing solar radiation exposure) to quantify micro-climate thermal penalties.
         """)
 else:
