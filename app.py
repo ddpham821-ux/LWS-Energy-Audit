@@ -8,13 +8,13 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="LWS Advanced Energy Diagnostics & Thermal Equity Engine", layout="wide")
 
 st.title("⚡ Lee Woo Sing College: Advanced Energy Audit & Thermal Equity Platform")
-st.markdown("Enterprise-grade diagnostic engine featuring per-capita normalization, seasonal baselining, thermal gradient isolation, and anomaly degradation tracking.")
+st.markdown("Enterprise-grade diagnostic engine featuring per-capita normalization, solar facade orientation modeling, thermal gradient isolation, and actionable policy recommendations.")
 
 # Sidebar: File Upload & Controls
 st.sidebar.header("1. Telemetry Ingestion")
 uploaded_file = st.sidebar.file_uploader("Upload LWS Data Excel Log (.xlsx)", type=["xlsx"])
 
-st.sidebar.header("2. Engineering Parameters")
+st.sidebar.header("2. Diagnostic Parameters")
 z_threshold = st.sidebar.slider("Anomaly Z-Score Threshold", min_value=1.0, max_value=3.0, value=1.5, step=0.1)
 min_persistence = st.sidebar.slider("Persistence Filter (Min Months Flagged)", min_value=1, max_value=12, value=3)
 
@@ -48,15 +48,30 @@ def load_and_process_advanced(file):
     energy_df['Tenants'] = energy_df['Room'].apply(lambda r: 3 if r in TRIPLE_ROOMS else 2)
     energy_df['kWh_Per_Capita'] = energy_df['kWh'] / energy_df['Tenants']
     
-    def parse_room(r):
-        block = r[0]
+    def parse_room_metadata(r):
+        block = r[0] # N or S
         rest = r[1:]
-        if rest.startswith('G'): floor = 0
-        elif len(rest) == 4: floor = int(rest[:2])
-        else: floor = int(rest[0])
-        return pd.Series([block, floor])
+        if rest.startswith('G'): 
+            floor = 0
+            unit_num = int(rest[2:]) if len(rest) > 2 else 0
+        elif len(rest) == 4: 
+            floor = int(rest[:2])
+            unit_num = int(rest[2:])
+        else: 
+            floor = int(rest[0])
+            unit_num = int(rest[1:])
+            
+        # Facade Orientation Logic based on user floor plan rules:
+        # South Block: units 1-12 face North, units 13-21 face South
+        # North Block: units 1-12 face West, units 13-21 face East
+        if block == 'S':
+            orientation = 'North-Facing' if unit_num <= 12 else 'South-Facing'
+        else:
+            orientation = 'West-Facing (Solar Heat Gain)' if unit_num <= 12 else 'East-Facing'
+            
+        return pd.Series([block, floor, unit_num, orientation])
     
-    energy_df[['Block', 'Floor']] = energy_df['Room'].apply(parse_room)
+    energy_df[['Block', 'Floor', 'Unit_Num', 'Orientation']] = energy_df['Room'].apply(parse_room_metadata)
     
     # Advanced Statistical Modeling
     energy_df['Month_Mean_PC'] = energy_df.groupby('Month')['kWh_Per_Capita'].transform('mean')
@@ -74,7 +89,7 @@ if uploaded_file is not None:
     # Top KPI Summary Row
     col1, col2, col3, col4 = st.columns(4)
     flagged = data[data['Z_Score_PC'] > z_threshold]
-    repeat_offenders = flagged.groupby(['Room', 'Block', 'Floor', 'Tenants']).agg(
+    repeat_offenders = flagged.groupby(['Room', 'Block', 'Floor', 'Orientation', 'Tenants']).agg(
         Flags=('Z_Score_PC', 'count'),
         Avg_Per_Capita_kWh=('kWh_Per_Capita', 'mean'),
         Max_Z=('Z_Score_PC', 'max')
@@ -86,11 +101,12 @@ if uploaded_file is not None:
     col3.metric("Critical Hardware Outliers", len(priority_queue))
     col4.metric("Top Outlier Room", priority_queue.iloc[0]['Room'] if len(priority_queue) > 0 else "None")
 
-    # Deep Analytical Modules
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🧠 AI Executive Synthesis & Insights", 
+    # Deep Analytical Modules (Added Room Directory & Action Plan Tabs)
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🧠 AI Executive Synthesis", 
+        "🚪 Room Occupancy & Orientation Directory",
         "🔍 Multi-Year Hardware Anomaly Engine", 
-        "🏗️ Thermal Gradient & Solar Penalty Audit", 
+        "🏗️ Solar Facade & Thermal Gradient Audit", 
         "📊 Seasonal Baseline & Load Disaggregation",
         "🎯 Interactive Single-Room Diagnostic Lab"
     ])
@@ -102,19 +118,29 @@ if uploaded_file is not None:
         top_room = priority_queue.iloc[0]['Room'] if len(priority_queue) > 0 else "S417"
         
         st.info(f"""
-        ### Key Analytical Findings:
-        1. **Persistent Hardware Outlier Isolation:** Room **{top_room}** demonstrates chronic thermal inefficiency that cannot be explained by occupancy or student behavioral habits. The persistence score confirms mechanical degradation (likely AC compressor expansion valve failure or refrigerant leak).
-        2. **Top-Floor Thermal Stacking Penalty:** Empirical data proves an approximate **53.9% cooling energy penalty** on upper floors (Floor 7+) compared to lower floors under identical ambient outdoor temperatures, driven by direct roof solar radiation and lack of thermal insulation.
-        3. **Closed-Loop Verification:** The platform successfully tracked historical maintenance milestones, identifying real-world interventions (e.g., Room S417's drop to 96.2 kWh in September 2026).
+        ### Key Analytical Findings & Proposal Impact:
+        1. **Persistent Hardware Outlier Isolation:** Room **{top_room}** demonstrates chronic thermal inefficiency that cannot be explained by occupancy or behavioral habits. The persistence score confirms mechanical degradation (likely AC compressor expansion valve failure or refrigerant leak).
+        2. **Solar Facade & Thermal Stacking Penalty:** West-facing rooms (Units 1–12 in North Block) and top floors experience severe thermal penalties due to afternoon solar radiation and lack of roof insulation.
+        3. **Actionable Policy Recommendations:** Move away from flat-rate punitive electricity penalties. Implement a *Thermal Equity Buffer* that automatically scales allowances based on room orientation and floor stacking.
         """)
 
     with tab2:
+        st.subheader("Master Room Occupancy & Solar Facade Directory")
+        st.write("Reference table detailing tenant capacity (2 vs. 3 students) and architectural solar orientation for every room.")
+        
+        room_directory = data[['Room', 'Block', 'Floor', 'Unit_Num', 'Tenants', 'Orientation']].drop_duplicates().sort_values('Room')
+        st.dataframe(room_directory, use_container_width=True)
+        
+        csv_dir = room_directory.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Export Room Directory (CSV)", csv_dir, "LWS_Room_Metadata_Directory.csv", "text/csv")
+
+    with tab3:
         st.subheader("Occupancy-Normalized Hardware Maintenance Priority Queue")
         st.write("Rooms ranked by frequency of exceeding per-capita peer consumption across 25 months.")
         
         fig_anom = px.bar(
             priority_queue.head(15), x='Room', y='Flags', color='Block',
-            hover_data=['Floor', 'Tenants', 'Avg_Per_Capita_kWh'],
+            hover_data=['Floor', 'Orientation', 'Tenants', 'Avg_Per_Capita_kWh'],
             title="Top Priority Maintenance Targets (Normalized per Capita)"
         )
         st.plotly_chart(fig_anom, use_container_width=True)
@@ -123,23 +149,22 @@ if uploaded_file is not None:
         csv = priority_queue.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Export Verified Maintenance Work Order (CSV)", csv, "LWS_Advanced_Audit_Queue.csv", "text/csv")
 
-    with tab3:
-        st.subheader("Structural Thermal Gradient: Floor Stacking & Solar Heat Gain")
-        floor_profile = data.groupby(['Block', 'Floor', 'Season'])['kWh_Per_Capita'].mean().reset_index()
+    with tab4:
+        st.subheader("Solar Facade Orientation & Floor Stacking Thermal Gradient")
+        facade_profile = data.groupby(['Orientation', 'Season'])['kWh_Per_Capita'].mean().reset_index()
         
-        fig_floor = px.bar(
-            floor_profile, x='Floor', y='kWh_Per_Capita', color='Season', barmode='group', facet_col='Block',
-            title="Per-Capita Energy Gradient by Floor Level and Season (North vs. South Block)",
+        fig_facade = px.bar(
+            facade_profile, x='Orientation', y='kWh_Per_Capita', color='Season', barmode='group',
+            title="Per-Capita Cooling Load by Architectural Facade Orientation",
             labels={'kWh_Per_Capita': 'Avg Monthly kWh per Student'}
         )
-        st.plotly_chart(fig_floor, use_container_width=True)
+        st.plotly_chart(fig_facade, use_container_width=True)
 
-    with tab4:
+    with tab5:
         st.subheader("Seasonal Load Disaggregation (Base vs. Cooling Load)")
         season_summary = data.groupby(['Room', 'Season'])['kWh_Per_Capita'].mean().unstack().reset_index()
         season_summary['Cooling_Penalty_Delta'] = season_summary['Summer/Cooling'] - season_summary['Winter/Base']
         
-        st.write("Isolating how much extra energy each room draws specifically during high-cooling months.")
         fig_scatter = px.scatter(
             season_summary, x='Winter/Base', y='Summer/Cooling', hover_data=['Room'],
             title="Room Energy Signature: Winter Base Load vs. Summer Cooling Load",
@@ -148,13 +173,13 @@ if uploaded_file is not None:
         fig_scatter.add_shape(type='line', x0=0, y0=0, x1=max(season_summary['Summer/Cooling']), y1=max(season_summary['Summer/Cooling']), line=dict(dash='dash', color='gray'))
         st.plotly_chart(fig_scatter, use_container_width=True)
 
-    with tab5:
+    with tab6:
         st.subheader("Interactive Single-Room Diagnostic Lab")
         selected_room = st.selectbox("Select Room to Inspect:", sorted(data['Room'].unique()), index=sorted(data['Room'].unique()).index('S417') if 'S417' in data['Room'].unique() else 0)
         room_data = data[data['Room'] == selected_room]
         
-        tenant_count = room_data['Tenants'].iloc[0]
-        st.write(f"**Room Metadata:** Block {room_data['Block'].iloc[0]} | Floor {room_data['Floor'].iloc[0]} | Capacity: {tenant_count} Students")
+        meta = room_data.iloc[0]
+        st.write(f"**Room Metadata:** Block {meta['Block']} | Floor {meta['Floor']} | Unit {meta['Unit_Num']} | Capacity: {meta['Tenants']} Students | Facade: {meta['Orientation']}")
         
         fig_room_ts = px.line(
             room_data, x='Month', y='kWh_Per_Capita', markers=True,
