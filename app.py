@@ -107,7 +107,7 @@ if uploaded_file is not None:
     col3.metric("Rooms Needing Inspection", len(action_queue))
     col4.metric("Top Priority Room", action_queue.iloc[0]['Room'] if len(action_queue) > 0 else "None")
 
-    # Clean, Non-Technical Tabs (Added Fair Policy & Next Steps Tab)
+    # Clean, Non-Technical Tabs
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🚨 What to Fix First (Action List)", 
         "💡 Fair Policy & Next Steps",
@@ -190,46 +190,4 @@ if uploaded_file is not None:
             selected_block_comp = st.selectbox("Select Block:", sorted(data['Block'].unique()), key='comp_block')
             selected_floor_comp = st.selectbox("Select Floor:", sorted(data[data['Block'] == selected_block_comp]['Floor'].unique()), key='comp_floor')
             
-            subset = data[(data['Block'] == selected_block_comp) & (data['Floor'] == selected_floor_comp)]
-            
-            fig_comp = px.bar(
-                subset, x='Room', y='Per_Student_kWh', color='Month', barmode='group',
-                title=f"Per-Student Energy Comparison Across Block {selected_block_comp}, Floor {selected_floor_comp}"
-            )
-            st.plotly_chart(fig_comp, use_container_width=True)
-        else:
-            selected_orient = st.selectbox("Select Window Facade Orientation:", sorted(data['Orientation'].unique()))
-            subset = data[data['Orientation'] == selected_orient]
-            
-            fig_orient = px.box(
-                subset, x='Room', y='Per_Student_kWh',
-                title=f"Energy Distribution for Rooms Facing: {selected_orient}"
-            )
-            st.plotly_chart(fig_orient, use_container_width=True)
-
-    with tab5:
-        st.subheader("Hostel Room Directory & Student Capacity")
-        st.write("Quick reference showing whether a room holds 2 or 3 students, and its window direction.")
-        directory = data[['Room', 'Block', 'Floor', 'Tenants', 'Orientation']].drop_duplicates().sort_values('Room')
-        st.dataframe(directory, use_container_width=True)
-
-    with tab6:
-        st.subheader("Intuitive Room Inspector (No Scrolling)")
-        st.write("Easily filter down to the room you want by picking its building block and floor first.")
-        
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            sel_block = st.selectbox("1. Select Block:", sorted(data['Block'].unique()))
-        with c2:
-            available_floors = sorted(data[data['Block'] == sel_block]['Floor'].unique())
-            sel_floor = st.selectbox("2. Select Floor:", available_floors)
-        with c3:
-            available_rooms = sorted(data[(data['Block'] == sel_block) & (data['Floor'] == sel_floor)]['Room'].unique())
-            sel_room = st.selectbox("3. Select Room Number:", available_rooms)
-            
-        room_history = data[data['Room'] == sel_room]
-        meta = room_history.iloc[0]
-        
-        st.info(f"**Room Details:** Room **{sel_room}** | Block {meta['Block']} | Floor {meta['Floor']} | Capacity: {meta['Tenants']} Students | Window Facing: {meta['Orientation']}")
-        
-        fig_hist = px.line(
+            subset = data[(data['Block']
