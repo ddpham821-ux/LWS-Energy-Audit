@@ -190,4 +190,4 @@ if uploaded_file is not None:
             selected_block_comp = st.selectbox("Select Block:", sorted(data['Block'].unique()), key='comp_block')
             selected_floor_comp = st.selectbox("Select Floor:", sorted(data[data['Block'] == selected_block_comp]['Floor'].unique()), key='comp_floor')
             
-            subset = data[(data['Block']
+            subset = data[(data['Block'])]
