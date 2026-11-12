@@ -63,7 +63,7 @@ def load_and_process_advanced(file):
     energy_df['Month_Std_PC'] = energy_df.groupby('Month')['kWh_Per_Capita'].transform('std')
     energy_df['Z_Score_PC'] = (energy_df['kWh_Per_Capita'] - energy_df['Month_Mean_PC']) / energy_df['Month_Std_PC']
     
-    # Seasonal Baselining (Isolating Summer Cooling Peak vs Winter Base)
+    # Seasonal Baselining
     energy_df['Season'] = energy_df['Month'].apply(lambda m: 'Summer/Cooling' if any(s in m for s in ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']) else 'Winter/Base')
     
     return energy_df
@@ -157,4 +157,9 @@ if uploaded_file is not None:
         st.write(f"**Room Metadata:** Block {room_data['Block'].iloc[0]} | Floor {room_data['Floor'].iloc[0]} | Capacity: {tenant_count} Students")
         
         fig_room_ts = px.line(
-            room_data, x='Month', y=['kWh
+            room_data, x='Month', y='kWh_Per_Capita', markers=True,
+            title=f"Detailed Trajectory: Room {selected_room} (Per Capita kWh)"
+        )
+        st.plotly_chart(fig_room_ts, use_container_width=True)
+else:
+    st.info("👈 Please upload your `LWS Data.xlsx` telemetry file in the sidebar to initialize the advanced audit platform.")
