@@ -10,13 +10,27 @@ st.set_page_config(page_title="Lee Woo Sing College - Facilities Energy Action D
 st.title("⚡ Lee Woo Sing College: Facilities Energy Action Desk")
 st.markdown("A practical management tool to track electricity usage, spot broken air conditioners, and fix room temperature issues across Hostels 4 and 5.")
 
-# Sidebar: File Upload & Controls
+# Sidebar: File Upload & Controls with Info Tooltips (ℹ️)
 st.sidebar.header("1. Upload Monthly Data")
 uploaded_file = st.sidebar.file_uploader("Upload LWS Data Excel Log (.xlsx)", type=["xlsx"])
 
 st.sidebar.header("2. Filtering Settings")
-sensitivity = st.sidebar.slider("Detection Sensitivity (How strict)", min_value=1.0, max_value=3.0, value=1.5, step=0.1)
-min_months = st.sidebar.slider("Minimum Months Problematic", min_value=1, max_value=12, value=3)
+
+# Slider with built-in info tooltip explaining the exact statistical formula
+sensitivity = st.sidebar.slider(
+    "Detection Sensitivity (How strict)", 
+    min_value=1.0, max_value=3.0, value=1.5, step=0.1,
+    help="Technical Formula: Z-Score Threshold (Z = (x - μ) / σ). "
+         "x is the room's per-student kWh, μ is the monthly peer average across all rooms, "
+         "and σ is the standard deviation. A setting of 1.5 flags rooms consuming 1.5 standard deviations above the monthly mean."
+)
+
+min_months = st.sidebar.slider(
+    "Minimum Months Problematic", 
+    min_value=1, max_value=12, value=3,
+    help="Persistence Filter: Ensures a room must be flagged as an outlier for at least N separate months "
+         "before appearing on the priority maintenance queue, filtering out temporary one-off behavioral spikes."
+)
 
 # Confirmed 32 Triple Rooms
 TRIPLE_ROOMS = [
@@ -61,7 +75,6 @@ def load_and_process_clean(file):
             floor = int(rest[0])
             unit_num = int(rest[1:])
             
-        # Facade orientation based on floor plan layout
         if block == 'S':
             orientation = 'North-Facing (Shaded)' if unit_num <= 12 else 'South-Facing (Sunny)'
         else:
@@ -147,5 +160,18 @@ if uploaded_file is not None:
             title=f"Electricity Use Over Time for Room {chosen_room} (Per Student kWh)"
         )
         st.plotly_chart(fig_hist, use_container_width=True)
+
+    # Collapsible Technical Section for Scholarship Reviewers & Judges
+    with st.expander("🔬 Engineering Methodology & Mathematical Formulas (For Reviewers)"):
+        st.markdown("""
+        If you are evaluating this platform for technical and algorithmic rigor, here are the underlying calculations used:
+        1. **Per-Capita Occupancy Normalization:** 
+           $$\\text{Per\\_Student\\_kWh} = \\frac{\\text{Total Room kWh}}{\\text{Tenants (2 or 3)}}$$
+           *Ensures high consumption isn't falsely blamed on rooms housing 3 students instead of 2.*
+        2. **Dynamic Monthly Z-Score Outlier Detection:** 
+           $$Z = \\frac{x - \\mu}{\\sigma}$$
+           Where $x$ is a room's per-student kWh, $\\mu$ is the monthly mean across all dorms, and $\\sigma$ is the standard deviation. This neutralizes seasonal weather shifts (e.g., higher summer cooling usage across the entire building) while isolating true mechanical hardware malfunctions.
+        3. **Facade Orientation Mapping:** Room numbers are programmatically parsed (e.g., North Block units 1–12 mapped to West-facing solar radiation exposure) to quantify micro-climate thermal penalties.
+        """)
 else:
     st.info("👈 Please upload your `LWS Data.xlsx` file in the sidebar to get started.")
