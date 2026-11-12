@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Lee Woo Sing College - Facilities Energy Action Desk", layout="wide")
 
 st.title("⚡ Lee Woo Sing College: Facilities Energy Action Desk")
-st.markdown("A practical management tool to track electricity usage, spot broken air conditioners, and fix room temperature issues across Hostels 4 and 5.")
+st.markdown("A practical management tool to track electricity usage, spot broken air conditioners, and improve room comfort fairly across Hostels 4 and 5.")
 
 # Sidebar: File Upload & Controls with Info Tooltips (ℹ️)
 st.sidebar.header("1. Upload Monthly Data")
@@ -107,9 +107,10 @@ if uploaded_file is not None:
     col3.metric("Rooms Needing Inspection", len(action_queue))
     col4.metric("Top Priority Room", action_queue.iloc[0]['Room'] if len(action_queue) > 0 else "None")
 
-    # Clean, Non-Technical Tabs (Added Floor & Facade Comparison Tab)
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # Clean, Non-Technical Tabs (Added Fair Policy & Next Steps Tab)
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🚨 What to Fix First (Action List)", 
+        "💡 Fair Policy & Next Steps",
         "☀️ Room Heat & Sun Exposure Guide", 
         "🏢 Floor & Facade Peer Comparison",
         "🚪 Room Directory & Occupancy",
@@ -130,6 +131,44 @@ if uploaded_file is not None:
         st.download_button("📥 Download Work Order for Technicians (CSV)", csv_export, "Maintenance_Action_List.csv", "text/csv")
 
     with tab2:
+        st.subheader("💡 Recommended Next Steps & Student-Friendly Policies")
+        st.write("How Lee Woo Sing College can reduce energy waste fairly without triggering student complaints over unequal electricity allowances:")
+        
+        col_a, col_b, col_c = st.columns(3)
+        
+        with col_a:
+            st.info("""
+            #### 1. Fix Hardware, Not Quotas
+            **Why:** Giving certain rooms different free electricity allowances often creates student jealousy and complaints.
+            
+            **Action:** Keep standard quotas transparent, and instead use the **Action List** to repair faulty AC units in flagged rooms before summer move-in.
+            """)
+            
+        with col_b:
+            st.success("""
+            #### 2. Passive Sun-Blocking Retrofits
+            **Why:** West-facing rooms (North Block units 1–12) and top floors suffer unavoidable afternoon heat gain.
+            
+            **Action:** Prioritize UV-blocking window films, external shading, or roof insulation on top floors to eliminate the structural cooling penalty at its source.
+            """)
+            
+        with col_c:
+            st.warning("""
+            #### 3. Positive "Green Dorm" Rewards
+            **Why:** Penalties frustrate residents, whereas positive incentives drive voluntary conservation.
+            
+            **Action:** Introduce a semesterly *Green Dorm Challenge* where rooms staying below their sun-adjusted peer average earn laundry credits or college perks.
+            """)
+            
+        st.divider()
+        st.markdown("### 📋 Discussion Checklist for Facilities Management")
+        st.markdown("""
+        * **Top-Up Data Review:** Cross-reference our flagged rooms with historical student electricity top-up records to see which floors pay the most out-of-pocket.
+        * **Pilot Floor Test:** Run a one-semester pilot on Floor 7 (top floor) vs. Floor 2 to measure exact kWh savings after window film or AC servicing.
+        * **Weather-Adjusted Baselines:** Consider scaling summer baseline allowances automatically during extreme Hong Kong Observatory heatwaves.
+        """)
+
+    with tab3:
         st.subheader("Why Certain Rooms Use More Power (Sun & Heat Study)")
         st.write("Based on the building blueprints, rooms facing the West (North Block units 1–12) and upper floors take direct afternoon sunlight, requiring much more cooling power.")
         
@@ -141,7 +180,7 @@ if uploaded_file is not None:
         )
         st.plotly_chart(fig_sun, use_container_width=True)
 
-    with tab3:
+    with tab4:
         st.subheader("Compare Rooms on the Same Floor or Sun Exposure")
         st.write("Select a floor or orientation to see how rooms compare side-by-side under identical thermal conditions.")
         
@@ -168,17 +207,16 @@ if uploaded_file is not None:
             )
             st.plotly_chart(fig_orient, use_container_width=True)
 
-    with tab4:
+    with tab5:
         st.subheader("Hostel Room Directory & Student Capacity")
         st.write("Quick reference showing whether a room holds 2 or 3 students, and its window direction.")
         directory = data[['Room', 'Block', 'Floor', 'Tenants', 'Orientation']].drop_duplicates().sort_values('Room')
         st.dataframe(directory, use_container_width=True)
 
-    with tab5:
+    with tab6:
         st.subheader("Intuitive Room Inspector (No Scrolling)")
         st.write("Easily filter down to the room you want by picking its building block and floor first.")
         
-        # Cascading Selectors
         c1, c2, c3 = st.columns(3)
         with c1:
             sel_block = st.selectbox("1. Select Block:", sorted(data['Block'].unique()))
@@ -195,22 +233,3 @@ if uploaded_file is not None:
         st.info(f"**Room Details:** Room **{sel_room}** | Block {meta['Block']} | Floor {meta['Floor']} | Capacity: {meta['Tenants']} Students | Window Facing: {meta['Orientation']}")
         
         fig_hist = px.line(
-            room_history, x='Month', y=['Per_Student_kWh', 'Monthly_Avg'], markers=True,
-            title=f"Electricity Use Over Time: Room {sel_room} vs. Dormitory Average (Per Student kWh)"
-        )
-        st.plotly_chart(fig_hist, use_container_width=True)
-
-    # Collapsible Technical Section for Scholarship Reviewers & Judges
-    with st.expander("🔬 Engineering Methodology & Mathematical Formulas (For Reviewers)"):
-        st.markdown("""
-        If you are evaluating this platform for technical and algorithmic rigor, here are the underlying calculations used:
-        1. **Per-Capita Occupancy Normalization:** 
-           $$\\text{Per\\_Student\\_kWh} = \\frac{\\text{Total Room kWh}}{\\text{Tenants (2 or 3)}}$$
-           *Ensures high consumption isn't falsely blamed on rooms housing 3 students instead of 2.*
-        2. **Dynamic Monthly Z-Score Outlier Detection:** 
-           $$Z = \\frac{x - \\mu}{\\sigma}$$
-           Where $x$ is a room's per-student kWh, $\\mu$ is the monthly mean across all dorms, and $\\sigma$ is the standard deviation. This neutralizes seasonal weather shifts while isolating true mechanical hardware malfunctions.
-        3. **Facade Orientation Mapping:** Room numbers are programmatically parsed (e.g., North Block units 1–12 mapped to West-facing solar radiation exposure) to quantify micro-climate thermal penalties.
-        """)
-else:
-    st.info("👈 Please upload your `LWS Data.xlsx` file in the sidebar to get started.")
