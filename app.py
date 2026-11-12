@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-
 # Page Configuration
 st.set_page_config(page_title="Lee Woo Sing College - Facilities Energy Action Desk", layout="wide")
 
